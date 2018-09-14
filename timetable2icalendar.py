@@ -1,5 +1,6 @@
 # coding: utf-8
 import re
+import random
 import requests
 from datetime import datetime, timedelta
 from icalendar import Calendar, Event
@@ -8,14 +9,16 @@ from bs4 import BeautifulSoup as BS
 
 def login(usr, pwd):
     s = requests.Session()
-    login_url = 'http://cas.bhu.edu.cn/cas/login?service=http%3A%2F%2Fi.bhu.edu.cn%3A80%2Fdcp%2Findex.jsp'
-    urp_url = 'http://210.47.177.103/mhLogin.jsp'
-    res = s.get(login_url)
-    lt, execution = re.findall(r'<input type="hidden" name="lt" value="(.*?)" />.*?<input type="hidden" name="execution" value="(.*?)" />', res.text, re.S)[0]
-    login_data = dict(casYhm=USR, casMm=PWD, code='code', lt=lt, execution=execution, _eventId='submit')
+    vcode_url = 'http://jw.bhu.edu.cn/validateCodeAction.do?random=' + str(random.random())[:-1]
+    login_url = 'http://jw.bhu.edu.cn/loginAction.do'
+    img = s.get(vcode_url)
+    with open('vcode.jpg', 'wb') as f:
+        f.write(img.content)
+    print('请查看当前路径下 vcode.jpg 验证码图像，输入验证码按回车继续...\n')
+    code = input()
+    login_data = dict(zjh=USR, mm=PWD, v_yzm=code)
     res = s.post(login_url, data=login_data)
-    if '渤大教务选课' in res.text:
-        s.get(urp_url)
+    if 'top.jsp' in res.text:
         return s
     else:
         print("Login Fialed")
@@ -53,16 +56,22 @@ def grasp_courses(s):
 
 def format_weeks(weeks, model='normal'):
     res = list()
-    for week in weeks.split(','):
-        if '-' in week:
-            start, end = week.split('-')
-            for i in range(int(start), int(end)+1):
-                if ((model == 'odd' and i % 2 == 1)
-                   or (model == 'even' and i % 2 == 0)
-                   or model == 'normal'):
-                    res.append(i)
-        else:
-            res.append(int(week))
+    flag = ''
+    if weeks.find(',') >= 0:
+        flag = ','
+    elif weeks.find('.') >= 0:
+        flag = '.'
+    if flag:
+        for week in weeks.split(flag):
+            if '-' in week:
+                start, end = week.split('-')
+                for i in range(int(start), int(end)+1):
+                    if ((model == 'odd' and i % 2 == 1)
+                       or (model == 'even' and i % 2 == 0)
+                       or model == 'normal'):
+                        res.append(i)
+            else:
+                res.append(int(week))
     return res
 
 def generate_calendar(courses):
@@ -96,7 +105,13 @@ def generate_calendar(courses):
 
 if __name__ == '__main__':
     cnt = 0
-    TERM_START = datetime(2017, 2, 27)
+    print('请输入学号')
+    USR = input()
+    print('请输入密码')
+    PWD = input()
+    print('请输入开学日期，如 2018-9-27 然后按回车继续')
+    y, m, d = input().split('-')
+    TERM_START = datetime(int(y), int(m), int(d))
     TIMETABLE_SCHEMA = [
         None,
         ((8, 20), (9, 10)),
@@ -110,8 +125,6 @@ if __name__ == '__main__':
     ]
     CLASS_STARTAT = timedelta(hours=8, minutes=20)
     CLASS_PERIOD = timedelta(hours=1)
-    USR = '********'
-    PWD = '********'
     with login(USR, PWD) as s:
         courses = grasp_courses(s)
     pprint(courses)
